@@ -1,0 +1,32 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: vet & build (host)
+        run: |
+          go vet ./...
+          go build ./...
+
+      - name: cross-build android/arm64 (pure Go, no NDK)
+        run: |
+          CGO_ENABLED=0 GOOS=android GOARCH=arm64 \
+            go build -ldflags "-s -w -X termux-forjanet/internal/config.BuildArch=arm64" \
+            -o dist/termux-forjanet-arm64 ./cmd/termux-forjanet
+          file dist/termux-forjanet-arm64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: termux-forjanet-arm64
+          path: dist/termux-forjanet-arm64
