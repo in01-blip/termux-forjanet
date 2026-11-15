@@ -12,14 +12,21 @@ repositorios existentes, pero su código está escrito desde cero.
   Go compila `android/arm64` en Go puro (`CGO_ENABLED=0`), sin necesitar el
   NDK de Android. Lo he compilado y comprobado con `file`: es un ELF ARM64
   real, enlazado contra `/system/bin/linker64` (el linker de Android).
-- **ARM32 (armeabi-v7a, 32 bits): Go exige CGO para este objetivo**, y CGO
-  para Android exige el NDK de Google instalado localmente — algo que este
-  entorno de desarrollo no puede descargar (su red solo permite dominios
-  como GitHub, PyPI, npm, crates.io, repositorios de Ubuntu; no
-  `dl.google.com`). Por eso el binario de 32 bits **se compila dentro del
-  propio Termux del dispositivo**, usando el compilador de Go nativo que
-  Termux ya instala para esa arquitectura — exactamente como hacen
-  `termux-mcp` y `DroidMCP`. `scripts/install.sh` hace esto automáticamente.
+- **ARM32 (armeabi-v7a, 32 bits): Go exige CGO para este objetivo siempre**,
+  tanto si cross-compilas desde un PC como si compilas nativamente dentro
+  del propio Termux — esto lo confirmó un usuario real ejecutando
+  `scripts/install.sh` en un dispositivo armv7l: el build falló con
+  `android/arm requires external (cgo) linking, but cgo is not enabled`
+  incluso compilando en el propio teléfono. CGO necesita un compilador C
+  que apunte a la libc del sistema destino (bionic, la de Android). Cuando
+  compilas **dentro de Termux**, el destino y el host son el mismo sistema,
+  así que no hace falta el NDK de Google: basta con instalar `clang`
+  (`pkg install -y clang`), que Termux ya trae preparado para esa misma
+  arquitectura. `scripts/install.sh` instala `clang` y activa
+  `CGO_ENABLED=1` automáticamente. Solo si quisieras cross-compilar el
+  binario de 32 bits **desde un PC** (no desde el propio dispositivo)
+  necesitarías el NDK — ahí sí el host (tu PC, con libc glibc) y el destino
+  (Android, con libc bionic) son sistemas distintos.
 - No tengo un dispositivo Android ni Termux reales para probar en caliente
   las llamadas a `termux-api` (batería, portapapeles, etc.); el código está
   escrito contra su interfaz documentada y con manejo explícito de "falta

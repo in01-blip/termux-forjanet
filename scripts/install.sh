@@ -5,10 +5,15 @@
 #   1. Detecta la arquitectura real del dispositivo con `uname -m`.
 #   2. Elige un PERFIL (alto/medio/bajo/patata) y unas flags de compilación
 #      adecuadas a esa arquitectura y, de forma aproximada, a la RAM del equipo.
-#   3. Compila termux-forjanet NATIVAMENTE, con el propio toolchain de Go instalado
-#      en Termux para esa arquitectura (nada se cross-compila desde un PC: así
-#      evitamos necesitar el NDK de Android, que Go exige para armv7/32 bits).
-#   4. Deja el binario en $PREFIX/bin/termux-forjanet.
+#   3. Compila termux-forjanet NATIVAMENTE, con el propio toolchain de Go y de
+#      clang que Termux ya trae instalado para esa arquitectura. El puerto de
+#      Go para android/arm (32 bits) exige SIEMPRE enlazado vía CGO —da igual
+#      si compilas en el propio dispositivo o cross-compilando desde un PC—,
+#      pero aquí no hace falta el NDK de Android: como el host y el destino
+#      son el mismo sistema (Termux corre sobre Android/bionic), el propio
+#      `clang` de Termux ya apunta de forma nativa a esa libc. android/arm64
+#      no tiene esta exigencia y compila en Go puro sin CGO.
+#   4. Dedeja el binario en $PREFIX/bin/termux-forjanet.
 #
 # Uso:
 #   pkg install -y golang git
@@ -26,12 +31,17 @@ case "${ARCH_RAW}" in
     GOARCH="arm64"
     GOARM=""
     PROFILE="alto"
+    # En 64 bits el dispositivo suele tener más RAM y más núcleos: podemos
+    # permitirnos un runtime de Go más "generoso" (más goroutines concurrentes
+    # de forma segura, GC menos agresivo) sin que el usuario note lag.
     GOGC_DEFAULT="150"
     ;;
   armv7l | armv8l | arm)
     GOARCH="arm"
     GOARM="7"
     PROFILE="medio"
+    # En 32 bits asumimos menos RAM: GC más agresivo para no acumular memoria,
+    # y evitamos habilitar módulos pesados (medios, UI automation) por defecto.
     GOGC_DEFAULT="75"
     ;;
   i686 | x86)
@@ -56,6 +66,7 @@ case "${ARCH_RAW}" in
 esac
 
 # --- 2. RAM disponible, para afinar aún más el perfil -----------------------
+# /proc/meminfo está disponible dentro de Termux sin permisos especiales.
 MEM_KB="$(awk '/MemTotal/{print $2}' /proc/meminfo 2>/dev/null || echo 0)"
 MEM_MB=$(( MEM_KB / 1024 ))
 echo "RAM total aproximada: ${MEM_MB} MB"
@@ -74,9 +85,20 @@ if ! command -v go >/dev/null 2>&1; then
   pkg install -y golang
 fi
 
+# clang es obligatorio para android/arm (32 bits): Go exige CGO para ese
+# objetivo siempre. Para android/arm64 no es estrictamente necesario, pero
+# lo instalamos igual por si GOARCH=arm64 también quiere enlazar con CGO
+# en el futuro (p. ej. para añadir alguna librería nativa).
+if ! command -v clang >/dev/null 2>&1; then
+  echo "Instalando clang (compilador nativo de Termux, necesario para CGO)..."
+  pkg install -y clang
+fi
+
 # --- 4. Compilación nativa (sin cross-compiling, sin NDK) -------------------
 cd "$(dirname "$0")/.."
-export CGO_ENABLED=0
+# Host y destino son el mismo sistema (Termux corre sobre Android/bionic),
+# así que el propio clang de Termux sirve como CC: no hace falta ningún NDK.
+export CGO_ENABLED=1
 export GOARCH GOARM
 
 LDFLAGS="-s -w -X termux-forjanet/internal/config.BuildArch=${GOARCH}${GOARM}"

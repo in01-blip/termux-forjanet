@@ -30,11 +30,18 @@ exposed unless the user explicitly opts in with environment variables.
 
 - **`android/arm64` cross-compiles in pure Go** (`CGO_ENABLED=0`) — no
   Android NDK required. CI builds and verifies this on every push.
-- **`android/arm` (32-bit) requires CGO**, and CGO for Android requires the
-  Android NDK. Rather than depending on the NDK, this project compiles the
-  32-bit binary **natively, on-device, inside Termux itself** — Termux's own
-  `golang` package already ships a working compiler for whatever CPU the
-  phone has. See `scripts/install.sh`.
+- **`android/arm` (32-bit) always requires CGO**, whether you cross-compile
+  from a PC or build natively inside Termux itself — confirmed by a real
+  user run of `scripts/install.sh` on an armv7l device, which failed with
+  `android/arm requires external (cgo) linking, but cgo is not enabled`
+  even when building on the phone. CGO needs a C compiler targeting the
+  destination's libc (Android's bionic). Building **inside Termux**, host
+  and target are the same system, so no NDK is needed at all: installing
+  `clang` (`pkg install -y clang`) is enough, since Termux already ships a
+  clang that targets that exact architecture's bionic. `scripts/install.sh`
+  installs `clang` and sets `CGO_ENABLED=1` automatically. The NDK is only
+  needed if you cross-compile the 32-bit binary **from a PC** instead —
+  there, host (glibc) and target (bionic) really are different systems.
 - `GOOS=android` (not `linux`) is required for any build that will run
   inside Termux: Android kills a plain `linux` binary the first time it
   tries to run an external command.

@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # cross-build-pc.sh — compilar desde un PC (Linux/Mac/WSL), NO desde Termux.
 #
-# Solo puede generar el binario ARM64 (android/arm64) sin dependencias extra,
-# porque el propio compilador de Go para "android/arm" (32 bits) exige CGO,
-# y CGO para Android exige el NDK de Google instalado localmente.
+# Solo puede generar el binario ARM64 (android/arm64) sin dependencias extra.
+# "android/arm" (32 bits) exige CGO siempre —en el propio Termux también—,
+# pero aquí, al cross-compilar desde un PC, el host (glibc) y el destino
+# (bionic) son sistemas distintos, así que sí hace falta el NDK de Google
+# para tener un compilador C que apunte a bionic. Dentro de Termux no hace
+# falta: ver scripts/install.sh, que usa el propio clang del dispositivo.
 #
 # Si necesitas el binario de 32 bits y no quieres compilarlo en el propio
 # teléfono con scripts/install.sh, instala el NDK y exporta:
