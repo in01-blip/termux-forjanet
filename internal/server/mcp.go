@@ -20,7 +20,7 @@ type Tool struct {
 	Handler     func(args map[string]any) (string, error)
 }
 
-// Server es un servidor MCP mínimo sobre stdio.
+// Server es un servidor MCP mínimo, agnóstico del transporte (stdio o HTTP).
 type Server struct {
 	Name    string
 	Version string
@@ -65,26 +65,45 @@ type rpcError struct {
 func (s *Server) Serve(in io.Reader, out io.Writer) error {
 	scanner := bufio.NewScanner(in)
 	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
-	enc := json.NewEncoder(out)
 
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {
 			continue
 		}
-		var req rpcRequest
-		if err := json.Unmarshal(line, &req); err != nil {
-			continue // notificación/basura: se ignora, no se rompe la sesión
-		}
-		resp := s.dispatch(req)
-		if resp == nil {
+		respBytes, hasResp := s.HandleMessage(line)
+		if !hasResp {
 			continue // era una notificación (sin id); no se responde
 		}
-		if err := enc.Encode(resp); err != nil {
+		if _, err := out.Write(respBytes); err != nil {
 			log.Printf("error escribiendo respuesta: %v", err)
 		}
 	}
 	return scanner.Err()
+}
+
+// HandleMessage procesa un único mensaje JSON-RPC (una línea en stdio, o el
+// cuerpo entero de una petición HTTP) y devuelve la respuesta ya serializada
+// en JSON, más un booleano que indica si hay respuesta (las notificaciones,
+// como "notifications/initialized", no la llevan). La usan tanto Serve
+// (transporte stdio) como ServeHTTP (transporte HTTP), para no duplicar la
+// lógica de despacho entre los dos transportes.
+func (s *Server) HandleMessage(raw []byte) (respBytes []byte, hasResp bool) {
+	var req rpcRequest
+	if err := json.Unmarshal(raw, &req); err != nil {
+		errResp := rpcResponse{JSONRPC: "2.0", Error: &rpcError{Code: -32700, Message: "JSON inválido"}}
+		b, _ := json.Marshal(errResp)
+		return b, true
+	}
+	resp := s.dispatch(req)
+	if resp == nil {
+		return nil, false
+	}
+	b, err := json.Marshal(resp)
+	if err != nil {
+		return nil, false
+	}
+	return append(b, '\n'), true
 }
 
 func (s *Server) dispatch(req rpcRequest) *rpcResponse {

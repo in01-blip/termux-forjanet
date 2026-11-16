@@ -46,6 +46,17 @@ func main() {
 	fmt.Fprintf(os.Stderr, "termux-forjanet arrancado — perfil=%s arquitectura=%s sensibles=%v peligrosos=%v\n",
 		cfg.Profile, cfg.Arch, cfg.EnableSensitive, cfg.EnableDangerous)
 
+	// Si se define TERMUXFORJANET_HTTP_ADDR, se sirve por HTTP (pensado para
+	// exponerlo vía túnel a un cliente MCP remoto, como Composio). Si no,
+	// comportamiento de siempre: stdio, para clientes locales como Claude Code.
+	if addr := os.Getenv("TERMUXFORJANET_HTTP_ADDR"); addr != "" {
+		if err := s.ServeHTTP(addr, cfg.AuthToken); err != nil {
+			fmt.Fprintln(os.Stderr, "error en el servidor HTTP:", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	if err := s.Serve(os.Stdin, os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, "error en el servidor:", err)
 		os.Exit(1)
